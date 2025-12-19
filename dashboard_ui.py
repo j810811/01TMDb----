@@ -112,9 +112,11 @@ class DashboardApp:
 
         TMDB.set_log_hook(lambda m: self._ui_call(self.sec_tmdb.log_view.write, m))
         douban.set_log_hook(lambda m: self._ui_call(self.sec_douban.log_view.write, m))
-        MTime.set_log_hook(lambda m, c="refresh": self._ui_call(self.sec_mtime.log_view.write_with_prefix, c, m))
+        MTime.set_log_hook(lambda m, c="refresh": self._ui_call(self.sec_mtime.log_view.write_with_prefix, c, self._format_mtime_log(c, m)))
 
         self.root.after(500, self._refresh_stats)
+
+        self.root.after(600, self._sync_toggle_buttons)
 
     def _load_split_ratios(self):
         defaults = {"tmdb": 0.75, "douban": 0.75, "mtime": 0.75}
@@ -245,9 +247,8 @@ class DashboardApp:
     def _build_tmdb_controls(self, parent):
         tk.Label(parent, text="控制", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
 
-        tk.Button(parent, text="开始", command=TMDB.start_download, width=12).pack(padx=10, pady=4)
-        tk.Button(parent, text="暂停", command=TMDB.pause_download, width=12).pack(padx=10, pady=4)
-        tk.Button(parent, text="继续", command=TMDB.resume_download, width=12).pack(padx=10, pady=4)
+        self.tmdb_btn_toggle = tk.Button(parent, text="开始", command=self._tmdb_toggle, width=12)
+        self.tmdb_btn_toggle.pack(padx=10, pady=6)
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=10, pady=10)
         tk.Label(parent, text="统计", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10)
@@ -264,17 +265,16 @@ class DashboardApp:
     def _build_douban_controls(self, parent):
         tk.Label(parent, text="Cookie", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
 
-        self.douban_cookie = tk.Entry(parent)
+        self.douban_cookie = tk.Text(parent, height=10, wrap="word")
         self.douban_cookie.pack(fill="x", padx=10)
         last_cookie = douban.load_last_cookie()
         if last_cookie:
-            self.douban_cookie.insert(0, last_cookie)
+            self.douban_cookie.insert("1.0", last_cookie)
 
         tk.Label(parent, text="控制", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
 
-        tk.Button(parent, text="开始", command=self._douban_start, width=12).pack(padx=10, pady=4)
-        tk.Button(parent, text="暂停", command=douban.pause_download, width=12).pack(padx=10, pady=4)
-        tk.Button(parent, text="继续", command=douban.resume_download, width=12).pack(padx=10, pady=4)
+        self.douban_btn_toggle = tk.Button(parent, text="开始", command=self._douban_toggle, width=12)
+        self.douban_btn_toggle.pack(padx=10, pady=6)
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=10, pady=10)
         tk.Label(parent, text="统计", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10)
@@ -288,30 +288,37 @@ class DashboardApp:
         self.douban_lbl_today = tk.Label(parent, text="今日新增：0 张", anchor="w")
         self.douban_lbl_today.pack(fill="x", padx=10, pady=2)
 
-    def _douban_start(self):
-        douban.start_download(self.douban_cookie.get())
+    def _douban_get_cookie(self) -> str:
+        try:
+            return (self.douban_cookie.get("1.0", "end-1c") or "").strip()
+        except Exception:
+            return ""
+
+    def _douban_toggle(self):
+        try:
+            running = bool(getattr(douban, "is_running", False))
+            paused = not bool(douban.pause_event.is_set())
+        except Exception:
+            running = False
+            paused = False
+
+        if running and not paused:
+            douban.pause_download()
+            return
+
+        if running and paused:
+            douban.resume_download()
+            return
+
+        douban.start_download(self._douban_get_cookie())
 
     def _build_mtime_controls(self, parent):
         tk.Label(parent, text="控制", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
 
-        tk.Button(parent, text="开始", command=MTime.start_download, width=12).pack(padx=10, pady=4)
-        tk.Button(parent, text="暂停", command=MTime.pause_download, width=12).pack(padx=10, pady=4)
-        tk.Button(parent, text="继续", command=MTime.resume_download, width=12).pack(padx=10, pady=4)
+        self.mtime_btn_toggle = tk.Button(parent, text="开始", command=self._mtime_toggle, width=12)
+        self.mtime_btn_toggle.pack(padx=10, pady=(6, 4))
         tk.Button(parent, text="刷新列表", command=MTime.start_refresh, width=12).pack(padx=10, pady=4)
         tk.Button(parent, text="重试失败", command=MTime.start_retry, width=12).pack(padx=10, pady=4)
-
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=10, pady=10)
-        tk.Label(parent, text="选项", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10)
-
-        self.mtime_var_mtime = tk.BooleanVar(value=True)
-        self.mtime_var_tmdb = tk.BooleanVar(value=False)
-
-        tk.Checkbutton(parent, text="下载 MTime", variable=self.mtime_var_mtime, command=self._sync_mtime_flags).pack(
-            anchor="w", padx=10, pady=(2, 0)
-        )
-        tk.Checkbutton(parent, text="下载 TMDB（已禁用）", variable=self.mtime_var_tmdb, command=self._sync_mtime_flags).pack(
-            anchor="w", padx=10, pady=(2, 0)
-        )
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=10, pady=10)
         tk.Label(parent, text="统计", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10)
@@ -325,11 +332,79 @@ class DashboardApp:
         self.mtime_lbl_pending_retry = tk.Label(parent, text="待重试：0", anchor="w")
         self.mtime_lbl_pending_retry.pack(fill="x", padx=10, pady=2)
 
-        self._sync_mtime_flags()
+    def _format_mtime_log(self, category: str, msg: str) -> str:
+        try:
+            if category != "mtime":
+                return msg
 
-    def _sync_mtime_flags(self):
-        MTime.enable_mtime_download = bool(self.mtime_var_mtime.get())
-        MTime.enable_tmdb_download = bool(self.mtime_var_tmdb.get())
+            token = "✔ MTime 保存："
+            if token in msg:
+                save_path = msg.split(token, 1)[1].strip()
+                base = getattr(MTime, "SAVE_DIR", "")
+                rel = save_path
+                if base and rel.startswith(base):
+                    rel = rel[len(base):]
+                rel = rel.lstrip("\\/")
+                rel = rel.replace("/", "\\")
+                return f"{rel}✔"
+        except Exception:
+            pass
+        return msg
+
+    def _tmdb_toggle(self):
+        try:
+            active = bool(getattr(TMDB, "is_downloading", False))
+            paused = bool(getattr(TMDB, "pause_requested", False))
+        except Exception:
+            active = False
+            paused = False
+
+        if active and not paused:
+            TMDB.pause_download()
+            return
+
+        TMDB.start_download()
+
+    def _mtime_toggle(self):
+        try:
+            active = bool(getattr(MTime, "is_downloading", False))
+            paused = bool(getattr(MTime, "pause_requested", False))
+        except Exception:
+            active = False
+            paused = False
+
+        if active and not paused:
+            MTime.pause_download()
+            return
+
+        MTime.start_download()
+
+    def _sync_toggle_buttons(self):
+        try:
+            active = bool(getattr(TMDB, "is_downloading", False))
+            paused = bool(getattr(TMDB, "pause_requested", False))
+            if hasattr(self, "tmdb_btn_toggle"):
+                self.tmdb_btn_toggle.config(text=("暂停" if active and not paused else "开始"))
+        except Exception:
+            pass
+
+        try:
+            running = bool(getattr(douban, "is_running", False))
+            paused = not bool(douban.pause_event.is_set())
+            if hasattr(self, "douban_btn_toggle"):
+                self.douban_btn_toggle.config(text=("暂停" if running and not paused else "开始"))
+        except Exception:
+            pass
+
+        try:
+            active = bool(getattr(MTime, "is_downloading", False))
+            paused = bool(getattr(MTime, "pause_requested", False))
+            if hasattr(self, "mtime_btn_toggle"):
+                self.mtime_btn_toggle.config(text=("暂停" if active and not paused else "开始"))
+        except Exception:
+            pass
+
+        self.root.after(300, self._sync_toggle_buttons)
 
     def _refresh_stats(self):
         try:
