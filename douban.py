@@ -190,9 +190,12 @@ def safe_json_request(url, params=None):
         r = requests.get(url, headers=HEADERS, params=params, timeout=20)
         if r.status_code == 200:
             return r.json()
-        log(f"❌ 请求错误 {r.status_code}: {url}")
+        hint = ""
+        if r.status_code in (301, 302, 401, 403):
+            hint = "（可能 Cookie 无效/缺失）"
+        log(f"❌ 请求错误 {r.status_code}{hint}: {url}")
     except Exception as e:
-        log(f"❌ 网络异常: {e}")
+        log(f"❌ 请求异常: {e}")
     return None
 
 
@@ -201,14 +204,17 @@ def safe_html_request(url):
         r = requests.get(url, headers=HEADERS, timeout=20)
         if r.status_code == 200:
             return r.text
-        log(f"❌ 请求错误 {r.status_code}: {url}")
+        hint = ""
+        if r.status_code in (301, 302, 401, 403):
+            hint = "（可能 Cookie 无效/缺失）"
+        log(f"❌ 请求错误 {r.status_code}{hint}: {url}")
     except Exception as e:
-        log(f"❌ 网络异常: {e}")
-    return None
+        log(f"❌ 请求异常: {e}")
+    return ""
 
 
 # ============================
-# ✅ 综艺列表（网页端稳定接口）
+# 综艺列表（网页端稳定接口）
 # ============================
 
 
@@ -319,6 +325,11 @@ def worker_main():
 
             log(f"🎬 正在处理：{title} ({rate})")
 
+            new_cnt = 0
+            skip_cnt = 0
+            fail_cnt = 0
+            pages_cnt = 0
+
             start = 0
             has_next = True
 
@@ -326,15 +337,22 @@ def worker_main():
                 photos, has_next = get_photos_page(sid, start)
 
                 if not photos:
+                    if start == 0:
+                        log("  ℹ 未获取到剧照列表（可能无剧照/被限制/需要有效 Cookie）")
                     break
+
+                pages_cnt += 1
 
                 for pid, url in photos:
                     with record_lock:
                         if url in record["photos"][sid]:
+                            skip_cnt += 1
                             continue
 
                     if download_file(url, save_path, pid):
                         log(f"  ✔ 下载成功: {pid}")
+
+                        new_cnt += 1
 
                         with record_lock:
                             record["photos"][sid].append(url)
@@ -346,13 +364,16 @@ def worker_main():
                         save_record()
                     else:
                         stats["fails"] += 1
+                        fail_cnt += 1
 
                     random_sleep(10, 25)
 
                 start += 30
                 random_sleep(20, 40)
 
-            log(f"✅ 《{title}》处理完成")
+            log(
+                f"✅ 《{title}》处理完成：新增 {new_cnt}，跳过 {skip_cnt}，失败 {fail_cnt}，扫描页 {pages_cnt}"
+            )
             random_sleep(60, 120)
 
         page += 1
