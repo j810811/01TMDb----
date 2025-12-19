@@ -36,7 +36,7 @@ HEADERS = {
 # 全局状态
 # ============================
 
-record = {"photos": {}, "daily": {}}
+record = {"photos": {}, "daily": {}, "completed": {}}
 record_lock = threading.Lock()
 
 is_running = False
@@ -141,12 +141,24 @@ def load_record():
         record["photos"] = {}
     if "daily" not in record:
         record["daily"] = {}
+    if "completed" not in record:
+        record["completed"] = {}
 
 
 def save_record():
     with record_lock:
         with open(RECORD_FILE, "w", encoding="utf-8") as f:
             json.dump(record, f, ensure_ascii=False, indent=2)
+
+
+def mark_subject_completed(subject_id, title, rate=""):
+    with record_lock:
+        record.setdefault("completed", {})
+        record["completed"][str(subject_id)] = {
+            "title": title,
+            "rate": rate,
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
 
 
 # ============================
@@ -292,6 +304,10 @@ def worker_main():
     global is_running, current_subject_id
 
     load_record()
+    with record_lock:
+        completed_cnt = len(record.get("completed", {}))
+    if completed_cnt:
+        log(f"[douban]已标记完成的节目数：{completed_cnt}✔")
     page = 0
 
     while is_running:
@@ -314,6 +330,12 @@ def worker_main():
             current_subject_id = sid
             title = subj["title"]
             rate = subj["rate"]
+
+            with record_lock:
+                is_completed = str(sid) in record.get("completed", {})
+            if is_completed:
+                log(f"[douban]{title}✔")
+                continue
 
             safe_title = re.sub(r'[\\/:*?"<>|]', "", title)
             save_path = os.path.join(SAVE_DIR, safe_title)
@@ -343,6 +365,19 @@ def worker_main():
 
                 pages_cnt += 1
 
+                if start == 0:
+                    with record_lock:
+                        known = set(record.get("photos", {}).get(sid, []))
+                    all_known = True
+                    for _pid, _url in photos:
+                        if _url not in known:
+                            all_known = False
+                            break
+                    if all_known:
+                        mark_subject_completed(sid, title, rate)
+                        log(f"[douban]{title}✔")
+                        break
+
                 for pid, url in photos:
                     with record_lock:
                         if url in record["photos"][sid]:
@@ -350,7 +385,9 @@ def worker_main():
                             continue
 
                     if download_file(url, save_path, pid):
-                        log(f"  ✔ 下载成功: {pid}")
+                        rel_path = os.path.relpath(os.path.join(save_path, pid), SAVE_DIR)
+                        rel_path = rel_path.replace("\\", "/")
+                        log(f"[douban]{rel_path}✔")
 
                         new_cnt += 1
 
@@ -374,6 +411,8 @@ def worker_main():
             log(
                 f"✅ 《{title}》处理完成：新增 {new_cnt}，跳过 {skip_cnt}，失败 {fail_cnt}，扫描页 {pages_cnt}"
             )
+            if new_cnt == 0 and fail_cnt == 0:
+                mark_subject_completed(sid, title, rate)
             random_sleep(60, 120)
 
         page += 1
