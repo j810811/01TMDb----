@@ -8,6 +8,7 @@ from tkinter import scrolledtext, ttk
 import TMDB
 import MTime
 import douban
+import maoyan
 
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard_ui_config.json")
@@ -30,8 +31,9 @@ class Section:
     def __init__(self, parent, title: str, with_log: bool = True):
         self.frame = tk.Frame(parent, relief="groove", borderwidth=2)
 
-        header = tk.Label(self.frame, text=title, font=("微软雅黑", 12, "bold"))
-        header.pack(fill="x")
+        if title:
+            header = tk.Label(self.frame, text=title, font=("微软雅黑", 12, "bold"))
+            header.pack(fill="x")
 
         body = tk.PanedWindow(self.frame, orient="horizontal", sashrelief="raised")
         body.pack(fill="both", expand=True)
@@ -98,8 +100,8 @@ class DashboardApp:
         cols.pack(fill="both", expand=True)
         self.cols = cols
 
-        self.sec_tmdb = Section(cols, "TMDB")
-        self.sec_douban = Section(cols, "Douban")
+        self.sec_tmdb = Section(cols, "", with_log=False)
+        self.sec_douban = Section(cols, "")
 
         self.cols.add(self.sec_tmdb.frame, stretch="always")
         self.cols.add(self.sec_douban.frame, stretch="always")
@@ -108,20 +110,34 @@ class DashboardApp:
         self._save_job = None
         self._split_ratios = self._load_split_ratios()
         self._col_ratios = self._load_col_ratios()
+        self._geometry = self._load_geometry()
 
         self.root.bind("<Configure>", self._on_resize)
         self.root.bind("<Unmap>", self._on_window_unmap)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.cols.bind("<ButtonRelease-1>", lambda e: self._on_user_col_change())
         self.sec_tmdb.body.bind("<ButtonRelease-1>", lambda e: self._on_user_split_change("tmdb"))
         self.sec_douban.body.bind("<ButtonRelease-1>", lambda e: self._on_user_split_change("douban"))
 
         self.root.after(0, self._apply_layout)
+        self.root.after(0, self._apply_geometry)
+        self.root.after(1200, self._force_save_config)
 
         self._build_tmdb_controls(self.sec_tmdb.right)
         self._build_douban_controls(self.sec_douban.right)
 
-        TMDB.set_log_hook(lambda m: self._ui_call(self.sec_tmdb.log_view.write, m))
+        def _tmdb_log(m: str):
+            self._ui_call(self.sec_douban.log_view.write_with_prefix, "tmdb", m)
+
+        TMDB.set_log_hook(_tmdb_log)
         douban.set_log_hook(lambda m: self._ui_call(self.sec_douban.log_view.write, m))
+        maoyan.set_log_hook(
+            lambda m: self._ui_call(
+                self.sec_douban.log_view.write_with_prefix,
+                "maoyan",
+                m,
+            )
+        )
         MTime.set_log_hook(
             lambda m, c="refresh": self._ui_call(
                 self.sec_douban.log_view.write_with_prefix,
@@ -152,6 +168,19 @@ class DashboardApp:
         except Exception:
             return defaults
 
+    def _load_geometry(self) -> str | None:
+        try:
+            if not os.path.exists(CONFIG_PATH):
+                return None
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            geom = data.get("geometry")
+            if isinstance(geom, str) and geom.strip():
+                return geom.strip()
+        except Exception:
+            return None
+        return None
+
     def _load_col_ratios(self):
         defaults = {"sash0": 1 / 2}
         try:
@@ -170,9 +199,40 @@ class DashboardApp:
 
     def _save_split_ratios(self):
         try:
-            payload = {"split_ratios": self._split_ratios, "col_ratios": self._col_ratios}
+            geom = None
+            try:
+                if self.root.state() != "iconic":
+                    geom = self.root.geometry()
+            except Exception:
+                geom = None
+
+            payload = {}
+            try:
+                if os.path.exists(CONFIG_PATH):
+                    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                        payload = json.load(f) or {}
+            except Exception:
+                payload = {}
+
+            payload["split_ratios"] = self._split_ratios
+            payload["col_ratios"] = self._col_ratios
+            payload["geometry"] = geom
+
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _force_save_config(self):
+        try:
+            self._save_split_ratios()
+        except Exception:
+            pass
+
+    def _apply_geometry(self):
+        try:
+            if self._geometry:
+                self.root.geometry(self._geometry)
         except Exception:
             pass
 
@@ -249,10 +309,27 @@ class DashboardApp:
                 pass
         self._split_job = self.root.after(150, self._apply_layout)
 
+        if self._save_job is not None:
+            try:
+                self.root.after_cancel(self._save_job)
+            except Exception:
+                pass
+        self._save_job = self.root.after(300, self._save_split_ratios)
+
     def _on_window_unmap(self, _event=None):
         try:
             if self.root.state() == "iconic":
                 self._hide_to_tray()
+        except Exception:
+            pass
+
+    def _on_close(self):
+        try:
+            self._save_split_ratios()
+        except Exception:
+            pass
+        try:
+            self.root.destroy()
         except Exception:
             pass
 
@@ -314,6 +391,10 @@ class DashboardApp:
                     pass
         finally:
             try:
+                self._save_split_ratios()
+            except Exception:
+                pass
+            try:
                 self.root.after(0, self.root.destroy)
             except Exception:
                 try:
@@ -325,9 +406,7 @@ class DashboardApp:
         self.root.after(0, lambda: fn(*args))
 
     def _build_tmdb_controls(self, parent):
-        tk.Label(parent, text="控制", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
-
-        self.tmdb_btn_toggle = tk.Button(parent, text="开始", command=self._tmdb_toggle, width=12)
+        self.tmdb_btn_toggle = tk.Button(parent, text="TMDB开始", command=self._tmdb_toggle, width=12)
         self.tmdb_btn_toggle.pack(padx=10, pady=6)
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=10, pady=10)
@@ -342,16 +421,73 @@ class DashboardApp:
         self.tmdb_lbl_total_images = tk.Label(parent, text="累计剧照：0", anchor="w")
         self.tmdb_lbl_total_images.pack(fill="x", padx=10, pady=2)
 
-    def _build_douban_controls(self, parent):
-        tk.Label(parent, text="Cookie", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=10, pady=10)
+        tk.Label(parent, text="Maoyan 控制", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10)
 
-        self.douban_cookie = tk.Text(parent, height=10, wrap="word")
+        row0 = tk.Frame(parent)
+        row0.pack(fill="x", padx=10, pady=(4, 0))
+        tk.Label(row0, text="来源:").pack(side="left")
+        self.maoyan_var_source = tk.StringVar(value="正在热映")
+        self.maoyan_opt_source = tk.OptionMenu(
+            row0,
+            self.maoyan_var_source,
+            "正在热映",
+            "即将上映",
+        )
+        self.maoyan_opt_source.pack(side="left", padx=(6, 0), fill="x", expand=True)
+
+        tk.Label(parent, text="maoyan Cookie", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10, pady=(8, 0))
+        self.maoyan_cookie = tk.Entry(parent)
+        self.maoyan_cookie.pack(fill="x", padx=10)
+        try:
+            last_cookie = maoyan.load_last_cookie()
+            if last_cookie:
+                self.maoyan_cookie.insert(0, last_cookie)
+        except Exception:
+            pass
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=10, pady=10)
+        tk.Label(parent, text="maoyan统计", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10)
+
+        self.maoyan_lbl_total_photos = tk.Label(parent, text="已记住图片数：0 张", anchor="w")
+        self.maoyan_lbl_total_photos.pack(fill="x", padx=10, pady=2)
+        self.maoyan_lbl_total_movies = tk.Label(parent, text="已记住电影数量：0 部", anchor="w")
+        self.maoyan_lbl_total_movies.pack(fill="x", padx=10, pady=2)
+        self.maoyan_lbl_current_movie = tk.Label(parent, text="当前电影已下载：0 张", anchor="w")
+        self.maoyan_lbl_current_movie.pack(fill="x", padx=10, pady=2)
+        self.maoyan_lbl_today = tk.Label(parent, text="今日新增：0 张", anchor="w")
+        self.maoyan_lbl_today.pack(fill="x", padx=10, pady=2)
+
+    def _maoyan_get_cookie(self) -> str:
+        try:
+            if hasattr(self, "maoyan_cookie"):
+                return (self.maoyan_cookie.get() or "").strip()
+        except Exception:
+            return ""
+        return ""
+
+    def _maoyan_task_text(self) -> str:
+        try:
+            source = (self.maoyan_var_source.get() or "").strip()
+        except Exception:
+            source = "正在热映"
+
+        if source == "正在热映":
+            return "__AUTO_HOT__"
+
+        if source == "即将上映":
+            return "__AUTO_COMING__"
+
+        return "__AUTO_HOT__"
+
+    def _build_douban_controls(self, parent):
+        tk.Label(parent, text="douban Cookie", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
+
+        self.douban_cookie = tk.Entry(parent)
         self.douban_cookie.pack(fill="x", padx=10)
         last_cookie = douban.load_last_cookie()
         if last_cookie:
-            self.douban_cookie.insert("1.0", last_cookie)
-
-        tk.Label(parent, text="douban控制", font=("微软雅黑", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
+            self.douban_cookie.insert(0, last_cookie)
 
         self.douban_btn_toggle = tk.Button(parent, text="开始", command=self._douban_toggle, width=12)
         self.douban_btn_toggle.pack(padx=10, pady=6)
@@ -387,7 +523,7 @@ class DashboardApp:
 
     def _douban_get_cookie(self) -> str:
         try:
-            return (self.douban_cookie.get("1.0", "end-1c") or "").strip()
+            return (self.douban_cookie.get() or "").strip()
         except Exception:
             return ""
 
@@ -406,13 +542,24 @@ class DashboardApp:
             m_active = False
             m_paused = False
 
-        if (running and not paused) or (m_active and not m_paused):
+        try:
+            y_active = bool(getattr(maoyan, "is_running", False))
+            y_paused = not bool(maoyan.pause_event.is_set())
+        except Exception:
+            y_active = False
+            y_paused = False
+
+        if (running and not paused) or (m_active and not m_paused) or (y_active and not y_paused):
             try:
                 douban.pause_download()
             except Exception:
                 pass
             try:
                 MTime.pause_download()
+            except Exception:
+                pass
+            try:
+                maoyan.pause_download()
             except Exception:
                 pass
             return
@@ -424,6 +571,17 @@ class DashboardApp:
 
         try:
             MTime.start_download()
+        except Exception:
+            pass
+
+        try:
+            if y_active and y_paused:
+                maoyan.resume_download()
+            else:
+                maoyan.start_download(
+                    movie_ids_text=self._maoyan_task_text(),
+                    cookie=self._maoyan_get_cookie(),
+                )
         except Exception:
             pass
 
@@ -465,7 +623,7 @@ class DashboardApp:
             active = bool(getattr(TMDB, "is_downloading", False))
             paused = bool(getattr(TMDB, "pause_requested", False))
             if hasattr(self, "tmdb_btn_toggle"):
-                self.tmdb_btn_toggle.config(text=("暂停" if active and not paused else "开始"))
+                self.tmdb_btn_toggle.config(text=("TMDB暂停" if active and not paused else "TMDB开始"))
         except Exception:
             pass
 
@@ -474,9 +632,17 @@ class DashboardApp:
             paused = not bool(douban.pause_event.is_set())
             m_active = bool(getattr(MTime, "is_downloading", False))
             m_paused = bool(getattr(MTime, "pause_requested", False))
+            y_active = bool(getattr(maoyan, "is_running", False))
+            y_paused = not bool(maoyan.pause_event.is_set())
             if hasattr(self, "douban_btn_toggle"):
                 self.douban_btn_toggle.config(
-                    text=("暂停" if (running and not paused) or (m_active and not m_paused) else "开始")
+                    text=(
+                        "暂停"
+                        if (running and not paused)
+                        or (m_active and not m_paused)
+                        or (y_active and not y_paused)
+                        else "开始"
+                    )
                 )
         except Exception:
             pass
@@ -514,6 +680,24 @@ class DashboardApp:
             self.mtime_lbl_mtime_ok.config(text=f"MTime 成功：{MTime.mtime_ok}")
             self.mtime_lbl_mtime_fail.config(text=f"MTime 失败：{MTime.mtime_fail}")
             self.mtime_lbl_pending_retry.config(text=f"待重试：{MTime.get_pending_retry_count()}")
+        except Exception:
+            pass
+
+        try:
+            if hasattr(self, "maoyan_lbl_total_photos"):
+                self.maoyan_lbl_total_photos.config(
+                    text=f"已记住图片数：{maoyan.get_total_recorded_photos()} 张"
+                )
+            if hasattr(self, "maoyan_lbl_total_movies"):
+                self.maoyan_lbl_total_movies.config(
+                    text=f"已记住电影数量：{maoyan.get_total_recorded_movies()} 部"
+                )
+            if hasattr(self, "maoyan_lbl_current_movie"):
+                self.maoyan_lbl_current_movie.config(
+                    text=f"当前电影已下载：{maoyan.get_current_movie_count()} 张"
+                )
+            if hasattr(self, "maoyan_lbl_today"):
+                self.maoyan_lbl_today.config(text=f"今日新增：{maoyan.get_today_count()} 张")
         except Exception:
             pass
 

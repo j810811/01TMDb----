@@ -708,10 +708,56 @@
       "https://img9.doubanio.com/view/photo/l/public/p2579131806.jpg",
       "https://img9.doubanio.com/view/photo/l/public/p2579131785.jpg",
       "https://img3.doubanio.com/view/photo/l/public/p2579131782.jpg"
+    ],
+    "36540857": [
+      "https://img9.doubanio.com/view/photo/l/public/p2910303055.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2910341415.jpg",
+      "https://img2.doubanio.com/view/photo/l/public/p2910303051.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2910341864.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2910303047.jpg",
+      "https://img1.doubanio.com/view/photo/l/public/p2910303058.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2910341367.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2910303052.jpg",
+      "https://img1.doubanio.com/view/photo/l/public/p2910303048.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2910303024.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2910341607.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2910341407.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2910341414.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2910303026.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2910303025.jpg",
+      "https://img1.doubanio.com/view/photo/l/public/p2917363299.jpg",
+      "https://img1.doubanio.com/view/photo/l/public/p2917363298.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2917363265.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2917363262.jpg",
+      "https://img1.doubanio.com/view/photo/l/public/p2917363250.jpg",
+      "https://img1.doubanio.com/view/photo/l/public/p2917363248.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2917363246.jpg",
+      "https://img1.doubanio.com/view/photo/l/public/p2910341859.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2910341837.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2910341832.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2910302457.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2910302456.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2910302455.jpg",
+      "https://img1.doubanio.com/view/photo/l/public/p2910302450.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2917363293.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2917363292.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2917363286.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2917363283.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2917363282.jpg",
+      "https://img1.doubanio.com/view/photo/l/public/p2917363270.jpg",
+      "https://img1.doubanio.com/view/photo/l/public/p2917363269.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2917363267.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2917363266.jpg",
+      "https://img9.doubanio.com/view/photo/l/public/p2917363264.jpg",
+      "https://img3.doubanio.com/view/photo/l/public/p2917363263.jpg",
+      "https://img2.doubanio.com/view/photo/l/public/p2917363261.jpg",
+      "https://img2.doubanio.com/view/photo/l/public/p2917363251.jpg",
+      "https://img1.doubanio.com/view/photo/l/public/p2917363249.jpg"
     ]
   },
   "daily": {
-    "2025-12-19": 697
+    "2025-12-19": 697,
+    "2025-12-20": 43
   },
   "completed": {
     "36540851": {
@@ -733,6 +779,16 @@
       "title": "喜剧之王单口季",
       "rate": "8.2",
       "time": "2025-12-19 20:12:15"
+    },
+    "36642447": {
+      "title": "再见爱人 第四季",
+      "rate": "6.4",
+      "time": "2025-12-20 22:08:26"
+    },
+    "30446494": {
+      "title": "明星大侦探 第五季",
+      "rate": "8.3",
+      "time": "2025-12-20 22:10:07"
     }
   }
 }
